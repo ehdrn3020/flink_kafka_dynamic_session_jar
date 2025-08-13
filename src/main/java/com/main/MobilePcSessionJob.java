@@ -38,8 +38,9 @@ public class MobilePcSessionJob {
                 .setValueOnlyDeserializer(new SimpleStringSchema())
                 .build();
 
+        System.out.println("=== Kafka Source 생성 완료 ===");
         DataStream<String> raw = env.fromSource(source, WatermarkStrategy.noWatermarks(), "kafka-source");
-
+        System.out.println("=== Kafka Source 생성 완료 ===");
 //        // 2) JSON -> Event
 //        DataStream<Event> events = raw
 //                .map(json -> MAPPER.readValue(json, Event.class))
@@ -90,9 +91,10 @@ public class MobilePcSessionJob {
                 }
             })
             .build();
-
+        System.out.println("=== Kafka Sink 생성 완료 ===");
         raw.sinkTo(sink).name("kafka-sink (passthrough)");
-
+        System.out.println("=== Kafka Raw 수신 완료 ===");
+        raw.print("RAW");
         env.execute("Mobile/PC Session Key to log-after (simple)");
     }
 }
