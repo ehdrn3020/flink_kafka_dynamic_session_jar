@@ -19,7 +19,7 @@ import java.nio.charset.StandardCharsets;
 public class MobilePcSessionJob {
 
     // 환경에 맞게 바꿔주세요
-    private static final String BOOTSTRAP_SERVERS = "127.0.0.1:9092";
+    private static final String BOOTSTRAP_SERVERS = "localhost:9092";
     private static final String INPUT_TOPIC  = "log-before";
     private static final String OUTPUT_TOPIC = "log-after";
 
@@ -94,7 +94,7 @@ public class MobilePcSessionJob {
         System.out.println("=== Kafka Sink 생성 완료 ===");
         raw.sinkTo(sink).name("kafka-sink (passthrough)");
         System.out.println("=== Kafka Raw 수신 완료 ===");
-        raw.print("RAW");
+
         env.execute("Mobile/PC Session Key to log-after (simple)");
     }
 }
