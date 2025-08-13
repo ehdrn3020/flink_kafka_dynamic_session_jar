@@ -40,45 +40,58 @@ public class MobilePcSessionJob {
 
         DataStream<String> raw = env.fromSource(source, WatermarkStrategy.noWatermarks(), "kafka-source");
 
-        // 2) JSON -> Event
-        DataStream<Event> events = raw
-                .map(json -> MAPPER.readValue(json, Event.class))
-                .returns(Types.POJO(Event.class));
+//        // 2) JSON -> Event
+//        DataStream<Event> events = raw
+//                .map(json -> MAPPER.readValue(json, Event.class))
+//                .returns(Types.POJO(Event.class));
+//
+//        // 3) 세션키 생성: mobile -> m_<ip>_<uid>, pc -> p_<ip>_<uid>; 그 외 타입은 드롭
+//        DataStream<EnrichedEvent> enriched = events
+//                .filter(e -> e != null && e.uid != null && e.ip != null && e.access_type != null)
+//                .map(e -> {
+//                    String at = e.access_type.toLowerCase();
+//                    if ("mobile".equals(at)) {
+//                        return new EnrichedEvent(e.uid, e.access_type, e.ip, e.ts, "m_" + e.ip + "_" + e.uid);
+//                    } else if ("pc".equals(at)) {
+//                        return new EnrichedEvent(e.uid, e.access_type, e.ip, e.ts, "p_" + e.ip + "_" + e.uid);
+//                    } else {
+//                        return null; // 불필요 타입 제거
+//                    }
+//                })
+//                .filter(x -> x != null)
+//                .returns(Types.POJO(EnrichedEvent.class));
+//
+//        // 4) Kafka Sink: Key=session, Value=전체 JSON
+//        KafkaSink<EnrichedEvent> sink = KafkaSink.<EnrichedEvent>builder()
+//                .setBootstrapServers(BOOTSTRAP_SERVERS)
+//                .setRecordSerializer(new KafkaRecordSerializationSchema<EnrichedEvent>() {
+//                    @Override
+//                    public ProducerRecord<byte[], byte[]> serialize(EnrichedEvent e, KafkaSinkContext ctx, Long ts) {
+//                        try {
+//                            byte[] key = e.session.getBytes(StandardCharsets.UTF_8);
+//                            byte[] value = MAPPER.writeValueAsBytes(e);
+//                            return new ProducerRecord<>(OUTPUT_TOPIC, key, value);
+//                        } catch (Exception ex) {
+//                            throw new RuntimeException(ex);
+//                        }
+//                    }
+//                })
+//                .build();
 
-        // 3) 세션키 생성: mobile -> m_<ip>_<uid>, pc -> p_<ip>_<uid>; 그 외 타입은 드롭
-        DataStream<EnrichedEvent> enriched = events
-                .filter(e -> e != null && e.uid != null && e.ip != null && e.access_type != null)
-                .map(e -> {
-                    String at = e.access_type.toLowerCase();
-                    if ("mobile".equals(at)) {
-                        return new EnrichedEvent(e.uid, e.access_type, e.ip, e.ts, "m_" + e.ip + "_" + e.uid);
-                    } else if ("pc".equals(at)) {
-                        return new EnrichedEvent(e.uid, e.access_type, e.ip, e.ts, "p_" + e.ip + "_" + e.uid);
-                    } else {
-                        return null; // 불필요 타입 제거
-                    }
-                })
-                .filter(x -> x != null)
-                .returns(Types.POJO(EnrichedEvent.class));
+//        enriched.sinkTo(sink).name("kafka-sink");
 
-        // 4) Kafka Sink: Key=session, Value=전체 JSON
-        KafkaSink<EnrichedEvent> sink = KafkaSink.<EnrichedEvent>builder()
-                .setBootstrapServers(BOOTSTRAP_SERVERS)
-                .setRecordSerializer(new KafkaRecordSerializationSchema<EnrichedEvent>() {
-                    @Override
-                    public ProducerRecord<byte[], byte[]> serialize(EnrichedEvent e, KafkaSinkContext ctx, Long ts) {
-                        try {
-                            byte[] key = e.session.getBytes(StandardCharsets.UTF_8);
-                            byte[] value = MAPPER.writeValueAsBytes(e);
-                            return new ProducerRecord<>(OUTPUT_TOPIC, key, value);
-                        } catch (Exception ex) {
-                            throw new RuntimeException(ex);
-                        }
-                    }
-                })
-                .build();
+        KafkaSink<String> sink = KafkaSink.<String>builder()
+            .setBootstrapServers(BOOTSTRAP_SERVERS)
+            .setRecordSerializer(new KafkaRecordSerializationSchema<String>() {
+                @Override
+                public ProducerRecord<byte[], byte[]> serialize(String value, KafkaSinkContext ctx, Long ts) {
+                    // Key는 사용하지 않으므로 null, Value는 원문 문자열 그대로 전송
+                    return new ProducerRecord<>(OUTPUT_TOPIC, null, value.getBytes(StandardCharsets.UTF_8));
+                }
+            })
+            .build();
 
-        enriched.sinkTo(sink).name("kafka-sink");
+        raw.sinkTo(sink).name("kafka-sink (passthrough)");
 
         env.execute("Mobile/PC Session Key to log-after (simple)");
     }
