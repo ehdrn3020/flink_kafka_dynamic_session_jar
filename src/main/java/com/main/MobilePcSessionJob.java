@@ -249,3 +249,7 @@ public class MobilePcSessionJob {
         env.execute("IP-based Session (CIN=180m, others=30m) - Flink 1.15.4");
     }
 }
+
+
+//{"uid":"u21","access_type":"mobile","log_name":"CIN","in_time":"100","out_time":"","ip":"192.168.0.5","ts":1734144000000}
+//{"uid":"u21","access_type":"mobile","log_name":"CLICK","in_time":"150","out_time":"","ip":"192.168.0.5","ts":1734144000500}
