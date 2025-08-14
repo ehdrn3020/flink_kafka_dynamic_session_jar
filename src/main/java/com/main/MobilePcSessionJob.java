@@ -25,6 +25,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Collections;
 
 public class MobilePcSessionJob {
 
@@ -34,24 +37,35 @@ public class MobilePcSessionJob {
     private static final String OUTPUT_TOPIC = "log-after";
 
     // 처리 대상 log_name
-    private static final Set<String> ALLOWED_LOG_NAMES = Set.of("CIN", "COUT", "CLICK", "VISIT");
+    private static final Set<String> ALLOWED_LOG_NAMES;
+    static {
+        Set<String> tmp = new HashSet<>();
+        tmp.add("CIN");
+        tmp.add("COUT");
+        tmp.add("CLICK");
+        tmp.add("VISIT");
+        ALLOWED_LOG_NAMES = Collections.unmodifiableSet(tmp);
+    }
 
     // log_name 별 세션 연장 분수 (재배포로 변경 반영)
-    private static final Map<String, Integer> SESSION_MINUTES_BY_LOGNAME = Map.of(
-            "CIN",   180,
-            "COUT",   30,
-            "CLICK",  30,
-            "VISIT",  30
-    );
+    private static final Map<String, Integer> SESSION_MINUTES_BY_LOGNAME;
+    static {
+        Map<String, Integer> tmp = new HashMap<>();
+        tmp.put("CIN",   180);
+        tmp.put("COUT",   30);
+        tmp.put("CLICK",  30);
+        tmp.put("VISIT",  30);
+        SESSION_MINUTES_BY_LOGNAME = Collections.unmodifiableMap(tmp);
+    }
 
     private static final ObjectMapper MAPPER = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     // 입력 이벤트 POJO (필요 필드만)
     public static class Event {
-        public String log_name; // CIN/COUT/CLICK/VISIT
-        public String ip;       // 세션키
-        public Long   ts;       // epoch millis
+        public String log_name;
+        public String ip;
+        public Long   ts;
 
         // (있다면 다른 필드도 추가 가능: user_id, access_system 등)
         public Event() {}
