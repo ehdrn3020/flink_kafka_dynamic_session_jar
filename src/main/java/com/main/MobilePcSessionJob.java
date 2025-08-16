@@ -211,7 +211,14 @@ public class MobilePcSessionJob {
 
         DataStream<Event> events = env
                 .fromSource(source, WatermarkStrategy.noWatermarks(), "kafka-source")
-                .map(json -> MAPPER.readValue(json, Event.class))
+                .map(json -> { // 깨진 Json pass
+                    try {
+                        return MAPPER.readValue(json, Event.class);
+                    } catch (Exception ex) {
+                        System.err.println("Invalid JSON: " + json);
+                        return null; // 잘못된 메시지는 null 반환
+                    }
+                })
                 .returns(Types.POJO(Event.class))
                 .assignTimestampsAndWatermarks(wm);
 
