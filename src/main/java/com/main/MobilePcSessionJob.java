@@ -36,28 +36,17 @@ public class MobilePcSessionJob {
     private static final String INPUT_TOPIC  = "log-before";
     private static final String OUTPUT_TOPIC = "log-after";
 
-    // 처리 대상 log_name
-    private static final Set<String> ALLOWED_LOG_NAMES;
-    static {
-        Set<String> tmp = new HashSet<>();
-        tmp.add("CIN");
-        tmp.add("COUT");
-        tmp.add("CLICK");
-        tmp.add("VISIT");
-        ALLOWED_LOG_NAMES = Collections.unmodifiableSet(tmp);
-    }
-
-    // log_name 별 세션 연장 분수 (재배포로 변경 반영)
+    // log_name 별 세션 연장 시간
     private static final Map<String, Integer> SESSION_MINUTES_BY_LOGNAME;
     static {
         Map<String, Integer> tmp = new HashMap<>();
-        tmp.put("CIN",   180);
+        tmp.put("CIN", 180);
         tmp.put("COUT",   30);
         tmp.put("CLICK",  30);
         tmp.put("VISIT",  30);
         SESSION_MINUTES_BY_LOGNAME = Collections.unmodifiableMap(tmp);
     }
-
+    // JSON에 없는 필드가 있으면 에러 발생 무시
     private static final ObjectMapper MAPPER = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
@@ -67,7 +56,7 @@ public class MobilePcSessionJob {
         public String ip;
         public Long   ts;
 
-        // (있다면 다른 필드도 추가 가능: user_id, access_system 등)
+        // Flink POJO 조건
         public Event() {}
     }
 
@@ -82,7 +71,7 @@ public class MobilePcSessionJob {
         public SessionCtx() {}
     }
 
-    // === 출력 이벤트(Enriched) ===
+    // 출력 이벤트(Enriched)
     public static class EnrichedEvent {
         public String log_name;
         public String ip;
@@ -110,7 +99,7 @@ public class MobilePcSessionJob {
         }
     }
 
-    // === 핵심: 세션 처리 ===
+    // 세션 처리
     public static class SessionKeyProcess
             extends KeyedProcessFunction<String, Event, EnrichedEvent> {
 
@@ -122,7 +111,7 @@ public class MobilePcSessionJob {
                     new ValueStateDescriptor<>("session-state", Types.POJO(SessionCtx.class));
 
             // TTL(보조 안전장치). 타이머로도 지우지만 오래된 상태 자동정리.
-            StateTtlConfig ttl = StateTtlConfig.newBuilder(Time.hours(4))
+            StateTtlConfig ttl = StateTtlConfig.newBuilder(Time.hours(3))
                     .setUpdateType(StateTtlConfig.UpdateType.OnCreateAndWrite)
                     .cleanupFullSnapshot()
                     .build();
@@ -134,10 +123,12 @@ public class MobilePcSessionJob {
         @Override
         public void processElement(Event e, Context ctx, Collector<EnrichedEvent> out) throws Exception {
             if (e == null || e.ip == null || e.ts == null || e.log_name == null) return;
-            if (!ALLOWED_LOG_NAMES.contains(e.log_name)) return;
 
-            // log_name → 연장 분수
-            int minutes = SESSION_MINUTES_BY_LOGNAME.getOrDefault(e.log_name, 30);
+            // log_name 대상 인지 필터링
+            Integer  minutes = SESSION_MINUTES_BY_LOGNAME.getOrDefault(e.log_name, 30);
+            if (minutes == null) {
+                return;
+            }
             long gapMs  = minutes * 60_000L;
 
             SessionCtx s = sessionState.value();
@@ -174,7 +165,7 @@ public class MobilePcSessionJob {
         }
     }
 
-    // === JSON 직렬화 스키마 ===
+    // JSON 직렬화 스키마
     public static class JsonValueSchema<T> implements SerializationSchema<T> {
         @Override
         public byte[] serialize(T element) {
