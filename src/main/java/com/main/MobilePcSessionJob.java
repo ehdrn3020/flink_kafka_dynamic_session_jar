@@ -138,13 +138,15 @@ public class MobilePcSessionJob {
                 s = new SessionCtx();
                 s.sessionId = e.ip + "_" + e.ts; // ip_timestamp
                 s.startTs   = e.ts;
-                s.seq       = 0L;
+                s.seq       = 1L; // 첫 이벤트이므로 1부터 시작
+                s.lastEventTs = e.ts;
+                s.expireAt = e.ts + gapMs; // 최초 만료 시각
+            } else {
+                // 기존 세션 연장
+                s.lastEventTs = e.ts;
+                s.expireAt = s.expireAt + gapMs; // 기존 만료시각에 추가
+                s.seq++; // 기존 세션에서 카운트 증가
             }
-
-            // 갱신/연장
-            s.lastEventTs = e.ts;
-            s.expireAt    = e.ts + gapMs;
-            s.seq++;
 
             sessionState.update(s);
 
@@ -251,3 +253,5 @@ public class MobilePcSessionJob {
 
 //{"uid":"u21","access_type":"mobile","log_name":"CIN","in_time":"100","out_time":"","ip":"192.168.0.5","ts":1734144000000}
 //{"uid":"u21","access_type":"mobile","log_name":"CLICK","in_time":"150","out_time":"","ip":"192.168.0.5","ts":1734144000500}
+//{"uid":"u21","access_type":"mobile","log_name":"COUT","in_time":"150","out_time":"","ip":"192.168.0.5","ts":1734144001500}
+//{"uid":"u22","access_type":"mobile","log_name":"CIN","in_time":"100","out_time":"","ip":"192.168.0.1","ts":1734144000000}
