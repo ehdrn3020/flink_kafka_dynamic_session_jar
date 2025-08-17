@@ -1,0 +1,17 @@
+[Unit]
+Description=Flink JobManager ({{ flink_version }})
+After=network.target
+
+[Service]
+Type=simple
+User={{ flink_user }}
+Group={{ flink_group }}
+Environment=FLINK_HOME={{ flink_home }}
+WorkingDirectory={{ flink_home }}
+ExecStart={{ flink_home }}/bin/jobmanager.sh start-foreground
+ExecStop={{ flink_home }}/bin/jobmanager.sh stop
+Restart=on-failure
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

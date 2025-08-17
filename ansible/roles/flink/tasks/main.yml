@@ -1,0 +1,204 @@
+---
+
+- name: Verify flink group exists
+  group:
+    name: "{{ flink_group }}"
+    state: present
+  check_mode: yes
+  register: flink_group_check
+  failed_when: false
+
+- name: Verify flink user exists
+  user:
+    name: "{{ flink_user }}"
+    state: present
+  check_mode: yes
+  register: flink_user_check
+  failed_when: false
+
+- name: Fail if flink group does not exist
+  fail:
+    msg: "Group '{{ flink_group }}' does not exist. Please create it first."
+  when: flink_group_check.failed
+
+- name: Fail if flink user does not exist
+  fail:
+    msg: "User '{{ flink_user }}' does not exist. Please create it first."
+  when: flink_user_check.failed
+
+- name: Create flink directories
+  shell: |
+    sudo mkdir -p "{{ item }}" && \
+    sudo chown {{ flink_user }}:{{ flink_group }} "{{ item }}" && \
+    sudo chmod 755 "{{ item }}"
+  loop:
+    - "{{ flink_home }}"
+    - "{{ data_dir }}"
+    - "{{ log_dir }}"
+  changed_when: false
+
+- name: Check if Flink is already installed
+  stat:
+    path: "{{ flink_home }}/bin/start-cluster.sh"
+  register: flink_installed
+
+- name: Download and extract Flink
+  block:
+    - name: Download Flink {{ flink_version }}
+      get_url:
+        url: "{{ flink_download_url }}"
+        dest: "{{ flink_home }}/{{ flink_archive }}"
+        mode: '0644'
+
+    - name: Extract Flink
+      unarchive:
+        src: "{{ flink_home }}/{{ flink_archive }}"
+        dest: "{{ flink_home }}"
+        owner: "{{ flink_user }}"
+        group: "{{ flink_group }}"
+        remote_src: yes
+        extra_opts: ["--strip-components=1"]
+        creates: "{{ flink_home }}/bin"
+
+    - name: Remove Flink archive file
+      file:
+        path: "{{ flink_home }}/{{ flink_archive }}"
+        state: absent
+  when: not flink_installed.stat.exists
+
+- name: Remove default Flink configuration files
+  shell: |
+    sudo rm -f "{{ flink_home }}/conf/flink-conf.yaml" \
+               "{{ flink_home }}/conf/masters" \
+               "{{ flink_home }}/conf/slaves" \
+               "{{ flink_home }}/conf/flink-env.sh"
+  when: not flink_installed.stat.exists
+
+- name: Template flink-conf.yaml
+  template:
+    src: flink-conf.yaml.j2
+    dest: "{{ flink_home }}/conf/flink-conf.yaml"
+    mode: '0644'
+    owner: "{{ flink_user }}"
+    group: "{{ flink_group }}"
+    backup: yes
+  register: flink_conf_changed
+
+# masters/slaves는 master 노드에서만 생성
+- name: Template masters (master only)
+  template:
+    src: masters.j2
+    dest: "{{ flink_home }}/conf/masters"
+    mode: '0644'
+    owner: "{{ flink_user }}"
+    group: "{{ flink_group }}"
+  when: inventory_hostname in groups['flink_master']
+  register: flink_masters_changed
+
+- name: Template slaves (master only)
+  template:
+    src: slaves.j2
+    dest: "{{ flink_home }}/conf/slaves"
+    mode: '0644'
+    owner: "{{ flink_user }}"
+    group: "{{ flink_group }}"
+  when: inventory_hostname in groups['flink_master']
+  register: flink_slaves_changed
+
+# == 6) systemd 서비스 설치 ==
+# JobManager(service 1)
+- name: Create JobManager systemd service template (master only)
+  template:
+    src: flink-jobmanager.service.j2
+    dest: "{{ data_dir }}/flink-jobmanager.service"
+    mode: '0644'
+  when: inventory_hostname in groups['flink_master']
+
+- name: Check JobManager systemd file status (master only)
+  shell: |
+    if [ ! -f "{{ systemd_service_dir }}/flink-jobmanager.service" ]; then
+      echo "new"
+    elif cmp -s "{{ data_dir }}/flink-jobmanager.service" "{{ systemd_service_dir }}/flink-jobmanager.service"; then
+      echo "same"
+    else
+      echo "changed"
+    fi
+  register: jm_service_status
+  changed_when: false
+  when: inventory_hostname in groups['flink_master']
+
+- name: Install JobManager systemd service if changed (master only)
+  shell: |
+    sudo cp "{{ data_dir }}/flink-jobmanager.service" "{{ systemd_service_dir }}/flink-jobmanager.service" && \
+    sudo chmod 644 "{{ systemd_service_dir }}/flink-jobmanager.service" && \
+    sudo chown root:root "{{ systemd_service_dir }}/flink-jobmanager.service"
+  register: jm_service_changed
+  when: inventory_hostname in groups['flink_master'] and jm_service_status.stdout != "same"
+
+# TaskManager(service 2)
+- name: Create TaskManager systemd service template (workers + master 가능)
+  template:
+    src: flink-taskmanager.service.j2
+    dest: "{{ data_dir }}/flink-taskmanager.service"
+    mode: '0644'
+
+- name: Check TaskManager systemd file status
+  shell: |
+    if [ ! -f "{{ systemd_service_dir }}/flink-taskmanager.service" ]; then
+      echo "new"
+    elif cmp -s "{{ data_dir }}/flink-taskmanager.service" "{{ systemd_service_dir }}/flink-taskmanager.service"; then
+      echo "same"
+    else
+      echo "changed"
+    fi
+  register: tm_service_status
+  changed_when: false
+
+- name: Install TaskManager systemd service if changed
+  shell: |
+    sudo cp "{{ data_dir }}/flink-taskmanager.service" "{{ systemd_service_dir }}/flink-taskmanager.service" && \
+    sudo chmod 644 "{{ systemd_service_dir }}/flink-taskmanager.service" && \
+    sudo chown root:root "{{ systemd_service_dir }}/flink-taskmanager.service"
+  register: tm_service_changed
+  when: tm_service_status.stdout != "same"
+
+- name: Clean up temporary service files
+  shell: |
+    rm -f "{{ data_dir }}/flink-jobmanager.service" "{{ data_dir }}/flink-taskmanager.service"
+  args:
+    warn: false
+  changed_when: false
+
+- name: Reload systemd daemon
+  shell: sudo systemctl daemon-reload
+  when: (jm_service_changed is defined and jm_service_changed.changed) or
+    (tm_service_changed is defined and tm_service_changed.changed)
+
+# == 7) 서비스 재시작/기동 ==
+- name: Restart JobManager if config/service changed (master only)
+  shell: sudo systemctl restart flink-jobmanager
+  when: inventory_hostname in groups['flink_master'] and
+    (
+    (flink_conf_changed is defined and flink_conf_changed.changed) or
+    (flink_env_changed is defined and flink_env_changed.changed) or
+    (flink_masters_changed is defined and flink_masters_changed.changed) or
+    (flink_slaves_changed is defined and flink_slaves_changed.changed) or
+    (jm_service_changed is defined and jm_service_changed.changed)
+    )
+
+- name: Restart TaskManager if config/service changed
+  shell: sudo systemctl restart flink-taskmanager
+  when: (flink_conf_changed is defined and flink_conf_changed.changed) or
+    (flink_env_changed is defined and flink_env_changed.changed) or
+    (tm_service_changed is defined and tm_service_changed.changed)
+
+- name: Start and enable JobManager (master only)
+  shell: sudo systemctl start flink-jobmanager && sudo systemctl enable flink-jobmanager
+  register: jm_start_result
+  failed_when: jm_start_result.rc not in [0, 1]
+  when: inventory_hostname in groups['flink_master']
+
+- name: Start and enable TaskManager
+  shell: sudo systemctl start flink-taskmanager && sudo systemctl enable flink-taskmanager
+  register: tm_start_result
+  failed_when: tm_start_result.rc not in [0, 1]

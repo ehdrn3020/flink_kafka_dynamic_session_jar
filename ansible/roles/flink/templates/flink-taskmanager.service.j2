@@ -1,0 +1,18 @@
+[Unit]
+Description=Flink TaskManager %i ({{ flink_version }})
+After=network.target
+Requires=flink-jobmanager.service
+
+[Service]
+Type=simple
+User={{ flink_user }}
+Group={{ flink_group }}
+Environment=FLINK_HOME={{ flink_home }}
+WorkingDirectory={{ flink_home }}
+ExecStart={{ flink_home }}/bin/taskmanager.sh start-foreground
+ExecStop={{ flink_home }}/bin/taskmanager.sh stop
+Restart=on-failure
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

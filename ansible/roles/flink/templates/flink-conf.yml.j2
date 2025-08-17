@@ -1,0 +1,34 @@
+# === JobManager ===
+jobmanager.rpc.address: {{ flink_jobmanager_host }}
+jobmanager.rpc.port: {{ jobmanager_rpc_port }}
+jobmanager.heap.mb: {{ jobmanager_heap_mb }}
+rest.port: {{ flink_rest_port }}
+
+# === BlobServer === 잡 JAR/리소스 배포
+blob.server.port: {{ blob_server_port }}
+
+# === TaskManager ===
+taskmanager.heap.mb: {{ taskmanager_heap_mb }}
+taskmanager.numberOfTaskSlots: {{ taskmanager_slots }}
+
+# TM 제어면(RPC) 포트 고정 (단일 또는 범위: 예 6122 혹은 6122-6130)
+taskmanager.rpc.port: {{ taskmanager_rpc_port }}
+
+# TM 데이터(셔플) 포트 고정 (단일 또는 범위: 예 50040 혹은 50030-50050)
+taskmanager.data.port: {{ taskmanager_data_port }}
+
+# === Dirs / Logs ===
+# 작업/로그/플러그인 등 (필요 시 조정)
+taskmanager.tmp.dirs: {{ data_dir }}/tmp
+env.log.dir: {{ logs_dir }}
+
+# === State ===
+# 체크포인트/세이브포인트
+# state.checkpoints.dir: {{ state_checkpoints_dir }}
+# state.savepoints.dir: {{ state_savepoints_dir }}
+
+# (옵션) FS 기본 스킴
+# fs.default-scheme: file:///
+
+# (옵션) 하드/소켓 등 네트워크 버퍼 수 (구버전 키)
+# taskmanager.network.numberOfBuffers: 2048
