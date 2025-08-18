@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.main.model.Event;
 import com.main.model.EnrichedEvent;
 import com.main.model.SessionCtx;
+import com.main.util.EventParser;
 import org.apache.flink.api.common.eventtime.SerializableTimestampAssigner;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.SerializationSchema;
@@ -179,19 +180,29 @@ public class MobilePcSessionJob {
                 .setValueOnlyDeserializer(new org.apache.flink.api.common.serialization.SimpleStringSchema())
                 .build();
 
+        // Event Parser
         DataStream<Event> events = env
                 .fromSource(source, WatermarkStrategy.noWatermarks(), "kafka-source")
-                .map(json -> {
-                    try {
-                        return MAPPER.readValue(json, Event.class);
-                    } catch (Exception ex) {
-                        System.err.println("Invalid JSON: " + json);
-                        return null;
-                    }
-                })
+                .map(EventParser::parse)    // 문자열 → Event
+                .filter(e -> e != null)     // null 제거
                 .returns(Types.POJO(Event.class))
                 .assignTimestampsAndWatermarks(wm);
 
+//        // Json Parser
+//        DataStream<Event> events = env
+//                .fromSource(source, WatermarkStrategy.noWatermarks(), "kafka-source")
+//                .map(json -> {
+//                    try {
+//                        return MAPPER.readValue(json, Event.class);
+//                    } catch (Exception ex) {
+//                        System.err.println("Invalid JSON: " + json);
+//                        return null;
+//                    }
+//                })
+//                .returns(Types.POJO(Event.class))
+//                .assignTimestampsAndWatermarks(wm);
+
+        // 세션 처리
         DataStream<EnrichedEvent> enriched = events
                 .keyBy(e -> e.ip)
                 .process(new SessionKeyProcess())
