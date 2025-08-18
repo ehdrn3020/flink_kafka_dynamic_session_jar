@@ -2,6 +2,9 @@ package com.main;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.main.model.Event;
+import com.main.model.EnrichedEvent;
+import com.main.model.SessionCtx;
 import org.apache.flink.api.common.eventtime.SerializableTimestampAssigner;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.SerializationSchema;
@@ -23,11 +26,9 @@ import org.apache.flink.util.Collector;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Map;
-import java.util.Set;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 public class MobilePcSessionJob {
 
@@ -36,70 +37,25 @@ public class MobilePcSessionJob {
     private static final String INPUT_TOPIC  = "log-before";
     private static final String OUTPUT_TOPIC = "log-after";
 
+    // 1분 = 60,000ms
+    private static final long ONE_MINUTE_MS = 60_000L;
+
     // log_name 별 세션 연장 시간
     private static final Map<String, Integer> SESSION_MINUTES_BY_LOGNAME;
     static {
         Map<String, Integer> tmp = new HashMap<>();
         tmp.put("CIN", 180);
-        tmp.put("COUT",   30);
-        tmp.put("CLICK",  30);
-        tmp.put("VISIT",  30);
+        tmp.put("COUT", 30);
+        tmp.put("CLICK", 30);
+        tmp.put("VISIT", 30);
         SESSION_MINUTES_BY_LOGNAME = Collections.unmodifiableMap(tmp);
     }
-    // JSON에 없는 필드가 있으면 에러 발생 무시
+
+    // JSON 파서 (불필드 무시)
     private static final ObjectMapper MAPPER = new ObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    // 입력 이벤트 POJO (필요 필드만)
-    public static class Event {
-        public String log_name;
-        public String ip;
-        public Long   ts;
-
-        // Flink POJO 조건
-        public Event() {}
-    }
-
-    // 세션 상태
-    public static class SessionCtx {
-        public String sessionId;    // ip_timestamp
-        public long   startTs;
-        public long   lastEventTs;
-        public long   expireAt;
-        public long   seq;
-
-        public SessionCtx() {}
-    }
-
-    // 출력 이벤트(Enriched)
-    public static class EnrichedEvent {
-        public String log_name;
-        public String ip;
-        public Long   ts;
-
-        public String session_id;
-        public long   session_start_ts;
-        public long   session_last_ts;
-        public long   session_expire_at;
-        public long   seq_in_session;
-
-        public EnrichedEvent() {}
-
-        public static EnrichedEvent of(Event e, SessionCtx s) {
-            EnrichedEvent out = new EnrichedEvent();
-            out.log_name = e.log_name;
-            out.ip = e.ip;
-            out.ts = e.ts;
-            out.session_id = s.sessionId;
-            out.session_start_ts = s.startTs;
-            out.session_last_ts = s.lastEventTs;
-            out.session_expire_at = s.expireAt;
-            out.seq_in_session = s.seq;
-            return out;
-        }
-    }
-
-    // 세션 처리
+    // -------------------- 세션 처리 --------------------
     public static class SessionKeyProcess
             extends KeyedProcessFunction<String, Event, EnrichedEvent> {
 
@@ -110,7 +66,6 @@ public class MobilePcSessionJob {
             ValueStateDescriptor<SessionCtx> desc =
                     new ValueStateDescriptor<>("session-state", Types.POJO(SessionCtx.class));
 
-            // TTL(보조 안전장치). 타이머로도 지우지만 오래된 상태 자동정리.
             StateTtlConfig ttl = StateTtlConfig.newBuilder(Time.hours(3))
                     .setUpdateType(StateTtlConfig.UpdateType.OnCreateAndWrite)
                     .cleanupFullSnapshot()
@@ -124,37 +79,49 @@ public class MobilePcSessionJob {
         public void processElement(Event e, Context ctx, Collector<EnrichedEvent> out) throws Exception {
             if (e == null || e.ip == null || e.ts == null || e.log_name == null) return;
 
-            // log_name 대상 인지 필터링
-            Integer  minutes = SESSION_MINUTES_BY_LOGNAME.getOrDefault(e.log_name, 30);
-            if (minutes == null) {
-                return;
-            }
-            long gapMs  = minutes * 60_000L;
-
             SessionCtx s = sessionState.value();
 
-            // 신규 or 만료 이후면 새 세션 시작
+            // 신규 세션 or 만료 후 새로 시작
             if (s == null || e.ts > s.expireAt) {
                 s = new SessionCtx();
-                s.sessionId = e.ip + "_" + e.ts; // ip_timestamp
+                String baseKey;
+                if ("PC".equalsIgnoreCase(e.ctype)) {
+                    baseKey = e.ip;
+                } else {
+                    baseKey = e.uuid;
+                }
+                s.sessionId = baseKey + "_" + e.ts;
                 s.startTs   = e.ts;
-                s.seq       = 1L; // 첫 이벤트이므로 1부터 시작
+                s.seq       = 1L;
                 s.lastEventTs = e.ts;
-                s.expireAt = e.ts + gapMs; // 최초 만료 시각
+                s.expireAt = e.ts; // 일단 초기값
+                s.cinOpened = false;
             } else {
-                // 기존 세션 연장
                 s.lastEventTs = e.ts;
-//                s.expireAt = s.expireAt + gapMs; // 기존 만료시각에 추가
-                s.expireAt = e.ts + gapMs;
-                s.seq++; // 기존 세션에서 카운트 증가
+                s.seq++;
             }
 
+            // 만료 시간 계산
+            long gapMs;
+            switch (e.log_name) {
+                case "CIN":
+                    gapMs = 180 * ONE_MINUTE_MS;
+                    s.cinOpened = true;
+                    break;
+                case "COUT":
+                    gapMs = 30 * ONE_MINUTE_MS;
+                    break;
+                default:
+                    gapMs = s.cinOpened ? 180 * ONE_MINUTE_MS : 30 * ONE_MINUTE_MS;
+            }
+
+            s.expireAt = e.ts + gapMs;
             sessionState.update(s);
 
-            // 만료 타이머 등록 (이벤트 시간)
+            // 만료 타이머 등록
             ctx.timerService().registerEventTimeTimer(s.expireAt);
 
-            // 즉시 Enriched 이벤트 방출
+            // 즉시 방출
             out.collect(EnrichedEvent.of(e, s));
         }
 
@@ -162,13 +129,12 @@ public class MobilePcSessionJob {
         public void onTimer(long timestamp, OnTimerContext ctx, Collector<EnrichedEvent> out) throws Exception {
             SessionCtx s = sessionState.value();
             if (s != null && timestamp == s.expireAt) {
-                // (선택) 세션 요약을 내보내고 싶다면 여기서 emit 가능
                 sessionState.clear();
             }
         }
     }
 
-    // JSON 직렬화 스키마
+    // -------------------- 직렬화 스키마 --------------------
     public static class JsonValueSchema<T> implements SerializationSchema<T> {
         @Override
         public byte[] serialize(T element) {
@@ -187,23 +153,24 @@ public class MobilePcSessionJob {
         }
     }
 
+    // -------------------- main --------------------
     public static void main(String[] args) throws Exception {
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-        // 체크포인트(권장)
+        // 체크포인트
         env.enableCheckpointing(30_000);
         env.getCheckpointConfig().setMinPauseBetweenCheckpoints(10_000);
         env.getCheckpointConfig().setCheckpointTimeout(5 * 60_000);
         env.getCheckpointConfig().setExternalizedCheckpointCleanup(
                 CheckpointConfig.ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION);
 
-        // 이벤트 시간 워터마크 (지연 5초 예시)
+        // 워터마크
         WatermarkStrategy<Event> wm = WatermarkStrategy
                 .<Event>forBoundedOutOfOrderness(Duration.ofSeconds(5))
                 .withTimestampAssigner((SerializableTimestampAssigner<Event>)
                         (e, ts) -> e.ts == null ? ts : e.ts);
 
-        // Kafka Source (값=JSON 문자열)
+        // Kafka Source
         KafkaSource<String> source = KafkaSource.<String>builder()
                 .setBootstrapServers(BOOTSTRAP_SERVERS)
                 .setTopics(INPUT_TOPIC)
@@ -214,24 +181,22 @@ public class MobilePcSessionJob {
 
         DataStream<Event> events = env
                 .fromSource(source, WatermarkStrategy.noWatermarks(), "kafka-source")
-                .map(json -> { // 깨진 Json pass
+                .map(json -> {
                     try {
                         return MAPPER.readValue(json, Event.class);
                     } catch (Exception ex) {
                         System.err.println("Invalid JSON: " + json);
-                        return null; // 잘못된 메시지는 null 반환
+                        return null;
                     }
                 })
                 .returns(Types.POJO(Event.class))
                 .assignTimestampsAndWatermarks(wm);
 
-        // keyBy(IP) → 세션 처리
         DataStream<EnrichedEvent> enriched = events
                 .keyBy(e -> e.ip)
                 .process(new SessionKeyProcess())
                 .name("session-key-process");
 
-        // Kafka Sink (Flink 1.15.4 시그니처: serialize(T, KafkaSinkContext, Long)을 내부에서 처리해줌)
         KafkaRecordSerializationSchema<EnrichedEvent> recordSchema =
                 KafkaRecordSerializationSchema.<EnrichedEvent>builder()
                         .setTopic(OUTPUT_TOPIC)
@@ -247,6 +212,6 @@ public class MobilePcSessionJob {
         enriched.sinkTo(sink).name("kafka-sink");
         enriched.print().name("debug-print");
 
-        env.execute("IP-based Session (CIN=180m, others=30m) - Flink 1.15.4");
+        env.execute("IP/UUID-based Session with CIN rules - Flink 1.18");
     }
 }
