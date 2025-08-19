@@ -86,7 +86,7 @@ public class MobilePcSessionJob {
             if (s == null || e.ts > s.expireAt) {
                 s = new SessionCtx();
                 String baseKey;
-                if ("PC".equalsIgnoreCase(e.ctype)) {
+                if ("html5".equalsIgnoreCase(e.system_type)) {
                     baseKey = e.ip;
                 } else {
                     baseKey = e.uuid;

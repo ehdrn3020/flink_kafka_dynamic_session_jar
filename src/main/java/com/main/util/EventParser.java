@@ -23,7 +23,7 @@ public class EventParser {
             // 기본 필드 매핑
             e.log_name = parts[2]; // 3번째: log_name
             e.ts = Long.parseLong(parts[3]); // 4번째: timestamp (epoch second)
-            e.ctype = parts[5];              // 6번째: access_system (PC / mobile / app 등)
+            e.system_type = parts[5];              // 6번째: access_system (PC / mobile / app 등)
             e.ip = parts[6];                 // 7번째: access_ip
 
             // 2단계: info 파싱 (마지막 필드 기준)
