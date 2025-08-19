@@ -8,7 +8,7 @@ public class Event {
     public String ip;
     public Long ts;       // epoch second
     public String uuid;
-    public String ctype;  // PC / mobile / app 등
+    public String system_type;  // PC / mobile / app 등
 
     public Event() {}
 
@@ -19,7 +19,7 @@ public class Event {
             ", ip='" + ip + '\'' +
             ", ts=" + ts +
             ", uuid='" + uuid + '\'' +
-            ", ctype='" + ctype + '\'' +
+            ", system_type='" + system_type + '\'' +
         '}';
     }
 }
