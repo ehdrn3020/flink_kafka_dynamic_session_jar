@@ -34,7 +34,7 @@ import java.util.Map;
 public class MobilePcSessionJob {
 
     // 환경값
-    private static final String BOOTSTRAP_SERVERS = "localhost:9092";
+    private static final String BOOTSTRAP_SERVERS = "172.31.0.206:9092";
     private static final String INPUT_TOPIC  = "log-before";
     private static final String OUTPUT_TOPIC = "log-after";
 
@@ -175,37 +175,27 @@ public class MobilePcSessionJob {
                 .setValueOnlyDeserializer(new org.apache.flink.api.common.serialization.SimpleStringSchema())
                 .build();
 
-        // Event Parser
+//        // Event Parser
+//        DataStream<Event> events = env
+//                .fromSource(source, WatermarkStrategy.noWatermarks(), "kafka-source")
+//                .map(EventParser::parse)    // 문자열 → Event
+//                .filter(e -> e != null)     // null 제거
+//                .returns(Types.POJO(Event.class))
+//                .assignTimestampsAndWatermarks(wm);
+
+        // Json Parser
         DataStream<Event> events = env
                 .fromSource(source, WatermarkStrategy.noWatermarks(), "kafka-source")
-//                .map(EventParser::parse)    // 문자열 → Event
                 .map(json -> {
                     try {
-                        // 입력 예시:
-                        // {"uid":"u21","access_type":"mobile","log_name":"CIN","in_time":"100","out_time":"","ip":"192.168.0.5","ts":1734144000000}
                         return MAPPER.readValue(json, Event.class);
                     } catch (Exception ex) {
                         System.err.println("Invalid JSON: " + json);
                         return null;
                     }
                 })
-                .filter(e -> e != null)     // null 제거
                 .returns(Types.POJO(Event.class))
                 .assignTimestampsAndWatermarks(wm);
-
-//        // Json Parser
-//        DataStream<Event> events = env
-//                .fromSource(source, WatermarkStrategy.noWatermarks(), "kafka-source")
-//                .map(json -> {
-//                    try {
-//                        return MAPPER.readValue(json, Event.class);
-//                    } catch (Exception ex) {
-//                        System.err.println("Invalid JSON: " + json);
-//                        return null;
-//                    }
-//                })
-//                .returns(Types.POJO(Event.class))
-//                .assignTimestampsAndWatermarks(wm);
 
         // 세션 처리
         DataStream<EnrichedEvent> enriched = events
