@@ -21,6 +21,7 @@ mvn -U -DskipTests package
 
 ### Simple Test
 ```declarative
+# topic 생성 ( partition 12 )
 # consumer console 실행
 /rnd/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic log-after --group flink-session-consumer
 
@@ -33,6 +34,92 @@ mvn -U -DskipTests package
 {"uid":"u21","access_type":"mobile","log_name":"COUT","in_time":"150","out_time":"","ip":"192.168.0.5","ts":1734144001500}
 {"uid":"u22","access_type":"mobile","log_name":"CIN","in_time":"100","out_time":"","ip":"192.168.0.1","ts":1734144000000}
 ```
+
+### Cluster Test
+### 실행
+
+### JM 서버에서만 설정 파일
+#### conf/masters 
+```declarative
+${master server IP or Hostname}:8081
+```
+
+#### conf/workers
+```declarative
+${Worker server 1 IP or Hostname}
+${Worker server 2 IP or Hostname}
+${Worker server 3 IP or Hostname}
+```
+
+#### conf/flink-conf.yaml
+```declarative
+# === JM 위치 ===
+jobmanager.rpc.address: ${Master server IP or Hostname}
+jobmanager.rpc.port: 6123
+
+# === REST/UI ===
+rest.bind-address: 0.0.0.0               # 수신 인터페이스
+rest.address: ${server IP or Hostname}   # 광고 주소(클러스터에서 접근할 주소)
+rest.port: 8081
+
+# === 바인딩 ===
+jobmanager.bind-host: 0.0.0.0
+taskmanager.bind-host: 0.0.0.0     # 공통(템플릿으로 배포)
+
+# === 리소스/슬롯 ===
+jobmanager.memory.process.size: 1600m
+taskmanager.numberOfTaskSlots: 2
+parallelism.default: 4
+
+# === 장애복구/체크포인트(옵션) ===
+# state.checkpoints.dir: s3://... 또는 hdfs://...
+# state.checkpoints.num-retained: 3
+# state.backend.type: hashmap   # 또는 rocksdb
+# jobmanager.execution.failover-strategy: region
+
+# === HA(옵션) ===
+# high-availability: zookeeper
+# high-availability.zookeeper.quorum: zk01:2181,zk02:2181,zk03:2181
+# high-availability.storageDir: hdfs://nn:8020/flink/ha
+```
+
+
+### TM 서버에서만 설정 파일
+
+#### conf/flink-conf.yaml
+```declarative
+# === JM 위치(동일) ===
+jobmanager.rpc.address: ${Master server IP or Hostname}
+jobmanager.rpc.port: 6123
+
+# === REST(UI는 JM에 있지만, 바인딩은 무해) ===
+rest.bind-address: 0.0.0.0
+rest.address: ${server IP or Hostname}   # TM 자신의 광고 주소여도 무해(없어도 됨)
+
+# === 바인딩 ===
+jobmanager.bind-host: 0.0.0.0
+taskmanager.bind-host: 0.0.0.0
+
+# === [중요] TM 자기 광고 주소(노드별 고유) ===
+taskmanager.host: ${server IP or Hostname}
+
+# === 리소스/슬롯 ===
+taskmanager.memory.process.size: 1728m
+taskmanager.numberOfTaskSlots: 2
+parallelism.default: 4
+
+# === 장애복구/체크포인트(옵션) ===
+# state.checkpoints.dir: s3://... 또는 hdfs://...
+# state.backend.type: hashmap
+# jobmanager.execution.failover-strategy: region
+```
+```declarative
+# ./flink/flink-1.18.1/bin/start-cluster.sh
+
+# ./flink/flink-1.18.1/bin/taskmanager.sh start
+```
+
+
 
 ### 추후 진행
 ```declarative

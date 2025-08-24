@@ -85,12 +85,7 @@ public class MobilePcSessionJob {
             // 신규 세션 or 만료 후 새로 시작
             if (s == null || e.ts > s.expireAt) {
                 s = new SessionCtx();
-                String baseKey;
-                if ("html5".equalsIgnoreCase(e.system_type)) {
-                    baseKey = e.ip;
-                } else {
-                    baseKey = e.uuid;
-                }
+                String baseKey = e.uid;
                 s.sessionId = baseKey + "_" + e.ts;
                 s.startTs   = e.ts;
                 s.seq       = 1L;
@@ -183,7 +178,17 @@ public class MobilePcSessionJob {
         // Event Parser
         DataStream<Event> events = env
                 .fromSource(source, WatermarkStrategy.noWatermarks(), "kafka-source")
-                .map(EventParser::parse)    // 문자열 → Event
+//                .map(EventParser::parse)    // 문자열 → Event
+                .map(json -> {
+                    try {
+                        // 입력 예시:
+                        // {"uid":"u21","access_type":"mobile","log_name":"CIN","in_time":"100","out_time":"","ip":"192.168.0.5","ts":1734144000000}
+                        return MAPPER.readValue(json, Event.class);
+                    } catch (Exception ex) {
+                        System.err.println("Invalid JSON: " + json);
+                        return null;
+                    }
+                })
                 .filter(e -> e != null)     // null 제거
                 .returns(Types.POJO(Event.class))
                 .assignTimestampsAndWatermarks(wm);
@@ -204,7 +209,7 @@ public class MobilePcSessionJob {
 
         // 세션 처리
         DataStream<EnrichedEvent> enriched = events
-                .keyBy(e -> e.ip)
+                .keyBy(e -> e.uid)
                 .process(new SessionKeyProcess())
                 .name("session-key-process");
 
