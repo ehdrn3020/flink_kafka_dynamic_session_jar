@@ -122,24 +122,74 @@ parallelism.default: 4
 # ./flink/flink-1.18.1/bin/taskmanager.sh start
 ```
 
+### RockDB 설정
+```declarative
+# ① State Backend = RocksDB 
+state.backend: rocksdb
+# ② 체크포인트 저장소 (HDFS/S3/NFS 등) 
+state.checkpoints.dir: hdfs://namenode:9000/flink/checkpoints 
+state.savepoints.dir: hdfs://namenode:9000/flink/savepoints 
 
+# ③ 증분 체크포인트(용량/시간 절약) 켜기 
+state.backend.incremental: true 
+
+# ④ RocksDB 로컬 디렉터리(고속 디스크 권장, 여러 경로 가능) 
+state.backend.rocksdb.localdir: /data/flink/rocksdb 
+
+# ⑤ RocksDB 메모리를 Flink Managed Memory로 관리(권장) 
+state.backend.rocksdb.memory.managed: true 
+
+# ⑥ 타이머 저장소(대규모 타이머 많으면 ROCKSDB 권장, 지연 낮추려면 HEAP) 
+state.backend.rocksdb.timer-service.factory: ROCKSDB # or HEAP # 
+
+⑦ (선택) 체크포인트 동작 
+execution.checkpointing.interval: 45s 
+execution.checkpointing.timeout: 5m 
+execution.checkpointing.unaligned: true # 셔플/백프레셔 심하면 유리
+execution.checkpointing.retained: 1 # checkpoint 보관 개수
+```
+
+### hadoop client 설치
+```declarative
+# flink 서버에서도 hadoop client 설치 필요
+
+# 설치
+wget https://downloads.apache.org/hadoop/common/hadoop-3.3.6/hadoop-3.3.6.tar.gz
+sudo tar -xzf hadoop-3.3.6.tar.gz -C /opt
+sudo ln -s /opt/hadoop-3.3.6 /opt/hadoop
+
+# 설정 값
+echo 'export HADOOP_HOME=/opt/hadoop' >> ~/.bashrc
+echo 'export PATH=$PATH:$HADOOP_HOME/bin:$HADOOP_HOME/sbin' >> ~/.bashrc
+echo 'export JAVA_HOME=/usr/lib/jvm/java-1.8.0-amazon-corretto.x86_64/jre' >> ~/.bashrc
+echo 'export PATH=$JAVA_HOME/bin:$PATH'  >> ~/.bashrc
+echo 'export JAVA_HOME=$JAVA_HOME' >> $HADOOP_HOME/etc/hadoop/hadoop-env.sh
+source ~/.bashrc
+
+# 유저 권한
+echo 'export HDFS_NAMENODE_USER=ec2-user' >> ~/.bashrc
+echo 'export HDFS_DATANODE_USER=ec2-user' >> ~/.bashrc
+echo 'export HDFS_SECONDARYNAMENODE_USER=ec2-user' >> ~/.bashrc
+echo 'export YARN_RESOURCEMANAGER_USER=ec2-user' >> ~/.bashrc
+echo 'export YARN_NODEMANAGER_USER=ec2-user'  >> ~/.bashrc
+
+# 설정파일 수정 (마스터 서버에서 복사)
+core-site.xml
+hdfs-site.xml
+
+# Hadoop이 알려주는 전체 클래스패스를 Flink에 전달
+export HADOOP_HOME=/opt/hadoop/hadoop-3.3.1
+export HADOOP_CONF_DIR=/opt/hadoop/hadoop-3.3.1/etc/hadoop/
+export HADOOP_CLASSPATH=$(/opt/hadoop/hadoop-3.3.1/bin/hadoop classpath --glob)
+
+export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
+export HADOOP_CLASSPATH="$($HADOOP_HOME/bin/hadoop classpath --glob)"
+
+```
 
 ### 추후 진행
 ```declarative
 - 병렬 수성
 - HA 구성
 - state RocksDB로 관리
-- 방화벽 포트
-# A (JobManager)
-ufw allow proto tcp from 10.0.0.0/24 to any port 6123 //jobmanager.rpc.port
-ufw allow proto tcp from 10.0.0.0/24 to any port 6124 //blob.server.port A <- B
-ufw allow 8081/tcp   # 필요 시 외부 개방 범위 조정
-
-# B (TaskManager)
-ufw allow proto tcp from 10.0.0.0/24 to any port 6122 //taskmanager.rpc.port
-ufw allow proto tcp from 10.0.0.0/24 to any port 50030:50050 //taskmanager.data.port
-
-# C (TaskManager)
-ufw allow proto tcp from 10.0.0.0/24 to any port 6122 //taskmanager.rpc.port
-ufw allow proto tcp from 10.0.0.0/24 to any port 50030:50050 //taskmanager.data.port
 ```
