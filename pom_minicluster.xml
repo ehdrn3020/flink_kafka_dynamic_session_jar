@@ -7,101 +7,84 @@
     <groupId>org.main</groupId>
     <artifactId>flink_kafka_dynamic_session_jar</artifactId>
     <version>1.0</version>
+    <name>flink_kafka_dynamic_session_jar</name>
 
     <properties>
-        <flink.version>1.17.0</flink.version>
-        <flink.connector.version>3.1.0-1.17</flink.connector.version>
+        <flink.version>1.18.1</flink.version>
+        <flink.kafka.connector.version>3.2.0-1.18</flink.kafka.connector.version>
+        <jackson.version>2.14.2</jackson.version>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
     <dependencies>
-        <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-java</artifactId>
-            <version>${flink.version}</version>
-            <scope>compile</scope>
-        </dependency>
-
+        <!-- Flink core (로컬 실행을 위해 provided 금지) -->
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-streaming-java</artifactId>
             <version>${flink.version}</version>
-            <scope>compile</scope>
         </dependency>
-
         <dependency>
             <groupId>org.apache.flink</groupId>
-            <artifactId>flink-core</artifactId>
+            <artifactId>flink-clients</artifactId>
             <version>${flink.version}</version>
-            <scope>compile</scope>
         </dependency>
-
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-runtime</artifactId>
             <version>${flink.version}</version>
-            <scope>compile</scope>
         </dependency>
 
-        <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-runtime-web</artifactId>
-            <version>${flink.version}</version>
-            <scope>compile</scope>
-        </dependency>
-
+        <!-- Kafka connector (FLIP-27) -->
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-connector-kafka</artifactId>
-            <version>${flink.connector.version}</version>
-            <scope>compile</scope>
+            <version>${flink.kafka.connector.version}</version>
         </dependency>
-
+        <!-- (안전장치) connector-base가 누락되면 명시적으로 추가 -->
         <dependency>
             <groupId>org.apache.flink</groupId>
-            <artifactId>flink-connector-files</artifactId>
+            <artifactId>flink-connector-base</artifactId>
             <version>${flink.version}</version>
-            <scope>compile</scope>
         </dependency>
 
+        <!-- Jackson -->
         <dependency>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-client</artifactId>
-            <version>3.3.1</version>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
 
+        <!-- 🔊 SLF4J 1.7.x용 Log4j2 바인딩 (2.x 아님!) -->
         <dependency>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-hdfs</artifactId>
-            <version>3.3.1</version>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+            <version>2.22.1</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-core</artifactId>
-            <version>2.23.1</version>
+            <version>2.22.1</version>
         </dependency>
 
-        <!-- API library -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-api</artifactId>
-            <version>2.23.1</version>
+            <version>2.22.1</version>
         </dependency>
 
         <dependency>
-            <groupId>org.apache.zookeeper</groupId>
-            <artifactId>zookeeper</artifactId>
-            <version>3.8.0</version>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-runtime-web</artifactId>
+            <version>1.18.1</version>
         </dependency>
-
     </dependencies>
 
     <build>
         <plugins>
-            <!-- Java 8 컴파일러 -->
+            <!-- Java 8 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -113,7 +96,7 @@
                 </configuration>
             </plugin>
 
-            <!-- Fat JAR 만들기 -->
+            <!-- (선택) shaded JAR: 로컬 디버깅엔 필요 없음. 만들려면 mainClass 수정 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -126,11 +109,12 @@
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>com.main.SessionKeyUnifier</mainClass>
-                                    <!-- main 클래스 경로 -->
+                                    <!-- ▶ 실제 main 클래스명으로 바꾸세요 -->
                                     <mainClass>com.main.MobilePcSessionJob</mainClass>
+<!--                                    <mainClass>com.main.TextSessionJob</mainClass>-->
                                 </transformer>
                             </transformers>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
                         </configuration>
                     </execution>
                 </executions>
