@@ -1,6 +1,16 @@
 # flink_kafka_dynamic_session_jar
 kafka topic data에 동적인 session 값 적용 flink jar module
 
+### 개요
+- Kafka에서 수집한 이벤트 로그(log-before)를 읽어 
+사용자 세션을 생성 및 관리
+- enriched 이벤트를 다시 Kafka(log-after)에 적재하는 작업을 수행
+- 세션 타임아웃 로직은 이벤트 유형에 따라 달라 짐 
+- 세션 단위 집계를 가능
+
+### 동작 흐름
+Kafka(log-before) --> Flink(SessionKeyProcess) --> Kafka(log-after)
+
 ### Flink Deploy 
 ```declarative
 # ansible 설치
