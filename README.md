@@ -35,9 +35,10 @@ mvn -U -DskipTests package
 {"uid":"u22","access_type":"mobile","log_name":"CIN","in_time":"100","out_time":"","ip":"192.168.0.1","ts":1734144000000}
 ```
 
-### Cluster Test
+### Cluster Deploy
 ### ssh
 ```declarative
+# aws의 경우 각 ec2 접속시 key 인증
 export FLINK_SSH_OPTS='-l ec2-user -i ~/.ssh/keypair.pem -o IdentitiesOnly=yes -o StrictHostKeyChecking=no'
 ```
 
@@ -117,8 +118,8 @@ parallelism.default: 4
 # jobmanager.execution.failover-strategy: region
 ```
 ```declarative
-# ./flink/flink-1.18.1/bin/start-cluster.sh
-
+./flink/flink-1.18.1/bin/start-cluster.sh
+# ./flink/flink-1.18.1/bin/jobmanager.sh start
 # ./flink/flink-1.18.1/bin/taskmanager.sh start
 ```
 
@@ -151,7 +152,7 @@ execution.checkpointing.retained: 1 # checkpoint 보관 개수
 
 ### hadoop client 설치
 ```declarative
-# flink 서버에서도 hadoop client 설치 필요
+# flink 의 저장소로 hdfs 설정을 위해 hadoop client 설치
 
 # 설치
 wget https://downloads.apache.org/hadoop/common/hadoop-3.3.6/hadoop-3.3.6.tar.gz
@@ -185,11 +186,4 @@ export HADOOP_CLASSPATH=$(/opt/hadoop/hadoop-3.3.1/bin/hadoop classpath --glob)
 export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop
 export HADOOP_CLASSPATH="$($HADOOP_HOME/bin/hadoop classpath --glob)"
 
-```
-
-### 추후 진행
-```declarative
-- 병렬 수성
-- HA 구성
-- state RocksDB로 관리
 ```

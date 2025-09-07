@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.main.model.Event;
 import com.main.model.EnrichedEvent;
 import com.main.model.SessionCtx;
-import com.main.util.EventParser;
 import org.apache.flink.api.common.eventtime.SerializableTimestampAssigner;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.serialization.SerializationSchema;
@@ -34,7 +33,7 @@ import java.util.Map;
 public class MobilePcSessionJob {
 
     // 환경값
-    private static final String BOOTSTRAP_SERVERS = "172.31.0.206:9092";
+    private static final String BOOTSTRAP_SERVERS = "172.31.0.299:9092";
     private static final String INPUT_TOPIC  = "log-before";
     private static final String OUTPUT_TOPIC = "log-after";
 
@@ -174,14 +173,6 @@ public class MobilePcSessionJob {
                 .setStartingOffsets(OffsetsInitializer.latest())
                 .setValueOnlyDeserializer(new org.apache.flink.api.common.serialization.SimpleStringSchema())
                 .build();
-
-//        // Event Parser
-//        DataStream<Event> events = env
-//                .fromSource(source, WatermarkStrategy.noWatermarks(), "kafka-source")
-//                .map(EventParser::parse)    // 문자열 → Event
-//                .filter(e -> e != null)     // null 제거
-//                .returns(Types.POJO(Event.class))
-//                .assignTimestampsAndWatermarks(wm);
 
         // Json Parser
         DataStream<Event> events = env
